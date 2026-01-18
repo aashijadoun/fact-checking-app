@@ -12,7 +12,30 @@ class FactChecker:
     
     def extract_claims(self, text: str) -> List[Dict]:
         """Extract specific claims from the text using OpenAI."""
-        prompt = f"""You are a fact-checking assistant. Analyze the following text and extract specific, verifiable claims. 
+        prompt = f"""
+You are a fact-checking assistant.
+
+Extract ALL sentences from the text below that:
+- Make a factual assertion
+- Contain numbers, dates, prices, years, or measurable facts
+
+Do NOT judge accuracy.
+Do NOT verify.
+Do NOT filter aggressively.
+
+Return STRICTLY valid JSON in this format:
+[
+  {{
+    "claim_text": "...",
+    "claim_type": "general",
+    "key_entities": []
+  }}
+]
+
+Text:
+{text[:8000]}
+"""
+
         
 Focus on:
 - Statistics and numbers (GDP, population, percentages, financial figures)
@@ -49,20 +72,38 @@ Return valid JSON only, no markdown formatting."""
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
-            
-            # Handle both direct array and wrapped object
-            if isinstance(result, dict):
-                claims = result.get('claims', [])
-            else:
-                claims = result if isinstance(result, list) else []
-            
-            # Ensure each claim has required fields
-            for claim in claims:
-                if 'key_entities' not in claim:
-                    claim['key_entities'] = []
-            
-            return claims[:20]  # Limit to 20 claims to avoid rate limits
+            raw = response.choices[0].message.content.strip()
+
+try:
+    result = json.loads(raw)
+except Exception:
+    result = []
+
+# Case 1: Model returned a list (preferred)
+if isinstance(result, list):
+    claims = result
+
+# Case 2: Model returned {"claims": [...]}
+elif isinstance(result, dict):
+    claims = result.get("claims", [])
+
+else:
+    claims = []
+
+# 🔐 HARD FALLBACK — never silently return empty
+if not claims:
+    claims = [
+        {
+            "claim_text": line.strip(),
+            "claim_type": "general",
+            "key_entities": []
+        }
+        for line in text.split("\n")
+        if any(char.isdigit() for char in line)
+    ]
+
+return claims[:20]
+  
             
         except Exception as e:
             print(f"Error extracting claims: {e}")
