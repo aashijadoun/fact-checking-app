@@ -228,6 +228,7 @@ Return valid JSON only."""
                 'explanation': f'Error during verification: {str(e)}',
                 'sources': sources
             }
+            """
     
     def process_document(self, text: str) -> Dict:
     
