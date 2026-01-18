@@ -230,7 +230,8 @@ Return valid JSON only."""
             }
     
     def process_document(self, text: str) -> Dict:
-        """Process a document: extract claims and verify them."""
+    """Process a document: extract claims and verify them."""
+       
         # Extract claims
         claims = self.extract_claims(text)
         
