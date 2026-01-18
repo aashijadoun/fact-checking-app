@@ -14,68 +14,77 @@ class FactChecker:
     # -------------------------
     # CLAIM EXTRACTION
     # -------------------------
-    def extract_claims(self, text: str) -> List[Dict]:
-        prompt = (
-            "You are a fact-checking assistant.\n\n"
-            "Extract ALL sentences from the text below that:\n"
-            "- Make a factual assertion\n"
-            "- Contain numbers, dates, prices, years, or measurable facts\n\n"
-            "Do NOT judge accuracy.\n"
-            "Do NOT verify.\n"
-            "Return STRICTLY valid JSON as a LIST like this:\n"
-            "[\n"
-            "  {\n"
-            "    \"claim_text\": \"...\",\n"
-            "    \"claim_type\": \"general\",\n"
-            "    \"key_entities\": []\n"
-            "  }\n"
-            "]\n\n"
-            "Text:\n"
-            f"{text[:8000]}"
+        def extract_claims(self, text: str) -> List[Dict]:
+    """
+    Extract factual claims from text.
+    Uses LLM first, then deterministic numeric fallback.
+    """
+
+    prompt = (
+        "You are a fact-checking assistant.\n\n"
+        "Extract ALL sentences from the text below that:\n"
+        "- Make a factual assertion\n"
+        "- Contain numbers, dates, prices, years, or measurable facts\n\n"
+        "Return STRICTLY valid JSON as a LIST like this:\n"
+        "[\n"
+        "  {\n"
+        "    \"claim_text\": \"...\",\n"
+        "    \"claim_type\": \"general\",\n"
+        "    \"key_entities\": []\n"
+        "  }\n"
+        "]\n\n"
+        "Text:\n"
+        f"{text[:8000]}"
+    )
+
+    try:
+        response = self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"}
         )
 
+        raw = response.choices[0].message.content.strip()
+
         try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "Always return valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = []
 
-            raw = response.choices[0].message.content.strip()
+        if isinstance(parsed, list):
+            claims = parsed
+        elif isinstance(parsed, dict):
+            claims = parsed.get("claims", [])
+        else:
+            claims = []
 
-            try:
-                result = json.loads(raw)
-            except Exception:
-                result = []
+    except Exception as e:
+        print("LLM extraction failed:", e)
+        claims = []
 
-            if isinstance(result, list):
-                claims = result
-            elif isinstance(result, dict):
-                claims = result.get("claims", [])
-            else:
-                claims = []
+    # 🔐 HARD FALLBACK — NEVER RETURN EMPTY
+    if not claims:
+        claims = [
+            {
+                "claim_text": line.strip(),
+                "claim_type": "general",
+                "key_entities": []
+            }
+            for line in text.split("\n")
+            if any(char.isdigit() for char in line)
+        ]
 
-            # HARD FALLBACK (never return empty)
-            if not claims:
-                claims = [
-                    {
-                        "claim_text": line.strip(),
-                        "claim_type": "general",
-                        "key_entities": []
-                    }
-                    for line in text.split("\n")
-                    if any(char.isdigit() for char in line)
-                ]
+    return claims[:20]
 
-            return claims[:20]
-
-        except Exception as e:
+     except Exception as e:
             print(f"Error extracting claims: {e}")
             return []
+    
+
 
     # -------------------------
     # WEB SEARCH
@@ -183,7 +192,8 @@ class FactChecker:
     # DOCUMENT PIPELINE
     # -------------------------
     def process_document(self, text: str) -> Dict:
-        """Process a document: extract claims and verify them."""
+    """Process a document: extract claims and verify them."""
+
 
         claims = self.extract_claims(text)
 
