@@ -23,7 +23,7 @@ Do NOT judge accuracy.
 Do NOT verify.
 Do NOT filter aggressively.
 
-Return STRICTLY valid JSON in this format:
+Return STRICTLY valid JSON as a LIST like this:
 [
   {{
     "claim_text": "...",
@@ -36,7 +36,7 @@ Text:
 {text[:8000]}
 """
 
-        
+
 Focus on:
 - Statistics and numbers (GDP, population, percentages, financial figures)
 - Dates and historical events
