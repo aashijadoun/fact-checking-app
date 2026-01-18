@@ -81,3 +81,6 @@ Once your code is on GitHub:
 
 See `DEPLOY_NOW.md` for complete instructions.
 
+Remove unnecessary deployment helper files
+
+
